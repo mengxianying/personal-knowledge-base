@@ -2,6 +2,8 @@
 
 用来整理产品需求、项目文档、工作笔记和模板。首页自带六篇虚构示例，可在 `content/` 中删除或替换。
 
+[打开知识库](https://mengxianying.github.io/personal-knowledge-base/)
+
 ## 从飞书导入
 
 1. 在飞书打开可访问的文档，复制正文。在网站点击「导入文档」，粘贴到正文框，也可以上传 Markdown 或 TXT 文件。
