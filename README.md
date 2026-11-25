@@ -1,6 +1,6 @@
 # 知屿 · 个人知识库
 
-用来整理产品需求、项目文档、工作笔记和模板。首页自带六篇虚构示例，可在 `content/` 中删除或替换。
+用来整理产品需求、项目文档、工作笔记和模板。首页自带三篇虚构示例，可在 `content/` 中删除或替换。
 
 [打开知识库](https://mengxianying.github.io/personal-knowledge-base/)
 
