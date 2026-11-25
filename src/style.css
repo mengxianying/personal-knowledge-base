@@ -154,6 +154,8 @@ svg { width: 19px; height: 19px; flex-shrink: 0; vertical-align: middle; }
 .document-row { display: flex; align-items: center; padding-right: 12px; transition: background .15s; }
 .document-row:hover { background: #fcfbff; }
 .document-row + .document-row { border-top: 1px solid #efedf4; }
+.row-actions { display: flex; align-items: center; flex-shrink: 0; }
+.row-actions svg { width: 16px; height: 16px; }
 .document-link { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 83px; align-items: center; gap: 14px; flex: 1; min-width: 0; padding: 12px 11px 12px 15px; min-height: 68px; }
 .document-link:focus-visible { outline-offset: -3px; }
 .document-link .category-icon { width: 37px; height: 37px; }
@@ -234,6 +236,7 @@ dialog::backdrop { background: #24203365; backdrop-filter: blur(2px); }
 .form-error:empty { display: none; }
 .publish-dialog { max-width: 480px; padding: 20px; }
 .publish-dialog p + p { margin-top: 7px; }
+#delete-document-name { color: var(--text); overflow-wrap: anywhere; }
 .publish-dialog .dialog-footer { padding: 15px 0 0; margin-top: 14px; }
 .toast { z-index: 30; position: fixed; bottom: 20px; right: 20px; background: #392754; color: white; padding: 11px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 16px #32264942; }
 @media (max-width: 1100px) {
@@ -271,7 +274,7 @@ dialog::backdrop { background: #24203365; backdrop-filter: blur(2px); }
   .document-link { grid-template-columns: auto minmax(0, 1fr); gap: 8px; padding-left: 8px; }
   .row-tags, .document-link time { display: none; }
   .document-link .category-icon { width: 32px; height: 32px; }
-  .bookmark-button { width: 31px; }
+  .row-actions .icon-button { width: 31px; }
   .reader-layout { display: block; }
   .reader-toc { display: none; }
   .reader { padding: 16px; }

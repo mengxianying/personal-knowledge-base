@@ -14,7 +14,7 @@ const categoryInfo = {
 
 const published = loadPublished();
 let drafts = loadDrafts();
-const bookmarks = loadBookmarks();
+let bookmarks = loadBookmarks();
 const state = { query: '', category: '', scope: '', tag: '', order: 'newest' };
 
 function allDocuments() {
@@ -81,6 +81,7 @@ app.innerHTML = `
   </dialog>
   <dialog id="delete-dialog" class="publish-dialog" aria-labelledby="delete-title">
     <h2 id="delete-title">删除本机文档？</h2>
+    <p><strong id="delete-document-name"></strong></p>
     <p>这会从当前浏览器里移除文档和它的收藏记录。</p>
     <footer class="dialog-footer">
       <button class="button secondary" type="button" data-action="close-delete" autofocus>取消</button>
@@ -104,7 +105,7 @@ function toast(message) {
 }
 
 function saveDraft(doc) {
-  const next = [doc, ...drafts.filter(item => item.id !== doc.id)];
+  const next = [doc, ...loadDrafts().filter(item => item.id !== doc.id)];
   saveDrafts(next);
   drafts = next;
   openDocument(doc.id);
@@ -112,6 +113,7 @@ function saveDraft(doc) {
 }
 
 function updateBookmark(id) {
+  bookmarks = loadBookmarks();
   const selected = bookmarks.has(id);
   if (selected) bookmarks.delete(id);
   else bookmarks.add(id);
@@ -188,6 +190,25 @@ function formatDate(date) {
   return date.replaceAll('-', '.');
 }
 
+function managementControls(doc, compact = false) {
+  if (!doc.local && !repository) return '';
+  const className = compact ? 'icon-button' : 'button secondary';
+  const path = doc.id.split('/').map(encodeURIComponent).join('/') + '.md';
+  return [['edit', '编辑', icons.edit], ['delete', '删除', icons.trash]].map(([action, verb, icon]) => {
+    const label = doc.local ? verb : '在 GitHub ' + verb;
+    const accessibleLabel = compact ? label + ' ' + doc.title : label;
+    const content = compact ? icon : icon + ' ' + label;
+    const style = action === 'delete' ? className + ' delete-button' : className;
+    const aria = doc.local && !compact && action === 'delete' ? '删除本机文档' : accessibleLabel;
+    const attributes = `class="${style}" aria-label="${escapeHtml(aria)}" title="${escapeHtml(accessibleLabel)}"`;
+    if (doc.local) {
+      return `<button type="button" ${attributes} data-action="${action}" data-id="${escapeHtml(doc.id)}">${content}</button>`;
+    }
+    const url = escapeHtml(`${repository}/${action}/main/content/${path}`);
+    return `<a ${attributes} href="${url}" target="_blank" rel="noopener noreferrer">${content}</a>`;
+  }).join('');
+}
+
 function documentRow(doc) {
   const selected = bookmarks.has(doc.id);
   return `
@@ -201,7 +222,10 @@ function documentRow(doc) {
         <span class="row-tags">${doc.tags.slice(0, 2).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</span>
         <time datetime="${escapeHtml(doc.date)}">${escapeHtml(formatDate(doc.date))}</time>
       </a>
-      <button type="button" class="icon-button bookmark-button" data-action="bookmark" data-id="${escapeHtml(doc.id)}" aria-pressed="${selected}" aria-label="${selected ? '取消收藏' : '收藏'} ${escapeHtml(doc.title)}">${icons.bookmark}</button>
+      <div class="row-actions">
+        ${managementControls(doc, true)}
+        <button type="button" class="icon-button bookmark-button" data-action="bookmark" data-id="${escapeHtml(doc.id)}" aria-pressed="${selected}" aria-label="${selected ? '取消收藏' : '收藏'} ${escapeHtml(doc.title)}">${icons.bookmark}</button>
+      </div>
     </article>`;
 }
 
@@ -268,9 +292,8 @@ function renderReader(doc) {
           <div class="reader-actions">
             <button type="button" class="button secondary" data-action="bookmark" data-id="${escapeHtml(doc.id)}" aria-pressed="${selected}">${icons.bookmark} ${selected ? '已收藏' : '收藏'}</button>
             <button type="button" class="button secondary" data-action="download">${icons.download} Markdown</button>
-            ${doc.local ? `<button type="button" class="button secondary" data-action="edit">${icons.edit} 编辑</button>
-              <button type="button" class="button primary" data-action="publish">${icons.github} 发布到 GitHub</button>
-              <button type="button" class="icon-button delete-button" aria-label="删除本机文档" data-action="delete">${icons.trash}</button>` : ''}
+            ${managementControls(doc)}
+            ${doc.local ? `<button type="button" class="button primary" data-action="publish">${icons.github} 发布到 GitHub</button>` : ''}
           </div>
         </header>
         <div class="markdown"></div>
@@ -328,19 +351,36 @@ function toggleMenu(open = !app.classList.contains('menu-open')) {
 
 const publishDialog = document.querySelector('#publish-dialog');
 const deleteDialog = document.querySelector('#delete-dialog');
+const deleteName = document.querySelector('#delete-document-name');
+let pendingDelete = '';
+
+deleteDialog.addEventListener('close', () => {
+  if (!deleteDialog.open) pendingDelete = '';
+});
+
 const actions = {
   import: () => openImport(),
-  edit: () => openImport(currentDocument()),
+  edit: button => {
+    const doc = loadDrafts().find(item => item.id === button.dataset.id);
+    if (doc) openImport(doc);
+  },
   back: showLibrary,
   bookmark: button => updateBookmark(button.dataset.id),
   download: downloadDocument,
   publish: () => publishDialog.showModal(),
   'close-publish': () => publishDialog.close(),
-  delete: () => deleteDialog.showModal(),
+  delete: button => {
+    const doc = loadDrafts().find(item => item.id === button.dataset.id);
+    if (!doc) return;
+    pendingDelete = doc.id;
+    deleteName.textContent = doc.title;
+    deleteDialog.showModal();
+  },
   'close-delete': () => deleteDialog.close(),
   'confirm-delete': () => {
-    const id = documentId();
-    const next = drafts.filter(doc => doc.id !== id);
+    const id = pendingDelete;
+    if (!id) return;
+    const next = loadDrafts().filter(doc => doc.id !== id);
     try {
       saveDrafts(next);
     } catch {
@@ -349,12 +389,14 @@ const actions = {
       return;
     }
     drafts = next;
+    bookmarks = loadBookmarks();
     bookmarks.delete(id);
     try { saveBookmarks(bookmarks); } catch { /* The removed document is no longer displayed. */ }
     deleteDialog.close();
-    clearFilters();
-    state.scope = 'local';
     showLibrary();
+    const heading = main.querySelector('#documents-heading');
+    heading?.setAttribute('tabindex', '-1');
+    heading?.focus({ preventScroll: true });
     toast('已删除本机文档');
   },
   repository: () => {
@@ -406,6 +448,11 @@ window.addEventListener('hashchange', () => {
   window.scrollTo(0, 0);
 });
 window.addEventListener('popstate', render);
+window.addEventListener('storage', () => {
+  drafts = loadDrafts();
+  bookmarks = loadBookmarks();
+  render();
+});
 
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return;
