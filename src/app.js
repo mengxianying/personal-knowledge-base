@@ -52,6 +52,7 @@ app.innerHTML = `
       </a>
       <nav class="side-navigation" aria-label="文档导航"></nav>
       <div class="side-bottom">
+        <a class="nav-button" href="#admin" data-nav="admin">${icons.layers}<span>后台管理</span></a>
         <button type="button" class="nav-button" data-action="repository">${icons.github}<span>GitHub 仓库</span>${icons.external}</button>
       </div>
     </aside>
@@ -93,6 +94,7 @@ app.innerHTML = `
 const main = document.querySelector('#main-content');
 const search = document.querySelector('#search');
 const nav = document.querySelector('.side-navigation');
+const adminLink = document.querySelector('[data-nav="admin"]');
 const openImport = installImportDialog(document.querySelector('#import-dialog'), saveDraft, categories);
 let toastTimer;
 
@@ -108,7 +110,8 @@ function saveDraft(doc) {
   const next = [doc, ...loadDrafts().filter(item => item.id !== doc.id)];
   saveDrafts(next);
   drafts = next;
-  openDocument(doc.id);
+  if (isAdmin()) render();
+  else openDocument(doc.id);
   toast('文档已保存到本机');
 }
 
@@ -139,6 +142,7 @@ function documentId() {
 
 const currentDocument = () => allDocuments().find(doc => doc.id === documentId());
 const documentUrl = id => `#doc/${encodeURIComponent(id)}`;
+const isAdmin = () => location.hash === '#admin';
 
 function openDocument(id) {
   const hash = documentUrl(id);
@@ -190,17 +194,14 @@ function formatDate(date) {
   return date.replaceAll('-', '.');
 }
 
-function managementControls(doc, compact = false) {
+function managementControls(doc) {
   if (!doc.local && !repository) return '';
-  const className = compact ? 'icon-button' : 'button secondary';
   const path = doc.id.split('/').map(encodeURIComponent).join('/') + '.md';
   return [['edit', '编辑', icons.edit], ['delete', '删除', icons.trash]].map(([action, verb, icon]) => {
     const label = doc.local ? verb : '在 GitHub ' + verb;
-    const accessibleLabel = compact ? label + ' ' + doc.title : label;
-    const content = compact ? icon : icon + ' ' + label;
-    const style = action === 'delete' ? className + ' delete-button' : className;
-    const aria = doc.local && !compact && action === 'delete' ? '删除本机文档' : accessibleLabel;
-    const attributes = `class="${style}" aria-label="${escapeHtml(aria)}" title="${escapeHtml(accessibleLabel)}"`;
+    const className = action === 'delete' ? 'button secondary delete-button' : 'button secondary';
+    const attributes = `class="${className}" aria-label="${escapeHtml(label + ' ' + doc.title)}" title="${label}"`;
+    const content = `${icon}<span>${verb}</span>`;
     if (doc.local) {
       return `<button type="button" ${attributes} data-action="${action}" data-id="${escapeHtml(doc.id)}">${content}</button>`;
     }
@@ -209,7 +210,7 @@ function managementControls(doc, compact = false) {
   }).join('');
 }
 
-function documentRow(doc) {
+function documentRow(doc, managing) {
   const selected = bookmarks.has(doc.id);
   return `
     <article class="document-row">
@@ -223,17 +224,19 @@ function documentRow(doc) {
         <time datetime="${escapeHtml(doc.date)}">${escapeHtml(formatDate(doc.date))}</time>
       </a>
       <div class="row-actions">
-        ${managementControls(doc, true)}
-        <button type="button" class="icon-button bookmark-button" data-action="bookmark" data-id="${escapeHtml(doc.id)}" aria-pressed="${selected}" aria-label="${selected ? '取消收藏' : '收藏'} ${escapeHtml(doc.title)}">${icons.bookmark}</button>
+        ${managing ? managementControls(doc) : `<button type="button" class="icon-button bookmark-button" data-action="bookmark" data-id="${escapeHtml(doc.id)}" aria-pressed="${selected}" aria-label="${selected ? '取消收藏' : '收藏'} ${escapeHtml(doc.title)}">${icons.bookmark}</button>`}
       </div>
     </article>`;
 }
 
 function renderLibrary(docs) {
-  const all = !state.query && !state.category && !state.scope && !state.tag;
-  const activeTitle = state.query ? '搜索结果' : state.category || (state.scope === 'local' ? '本机文档' : state.scope === 'bookmarks' ? '我的收藏' : state.tag || '总览');
+  const managing = isAdmin();
+  const all = !managing && !state.query && !state.category && !state.scope && !state.tag;
+  const activeTitle = managing ? '后台管理' : state.query ? '搜索结果' : state.category || (state.scope === 'local' ? '本机文档' : state.scope === 'bookmarks' ? '我的收藏' : state.tag || '总览');
   document.querySelector('#breadcrumb-current').textContent = activeTitle;
-  const visible = filterDocuments(docs, state).filter(doc => state.scope !== 'bookmarks' || bookmarks.has(doc.id));
+  const visible = managing
+    ? filterDocuments(docs, { query: state.query })
+    : filterDocuments(docs, state).filter(doc => state.scope !== 'bookmarks' || bookmarks.has(doc.id));
   const direction = state.order === 'newest' ? -1 : 1;
   visible.sort((first, second) => direction * first.date.localeCompare(second.date) || first.title.localeCompare(second.title, 'zh-CN'));
   main.innerHTML = `
@@ -266,8 +269,9 @@ function renderLibrary(docs) {
         <label class="sort"><select aria-label="排序"><option value="newest" ${state.order === 'newest' ? 'selected' : ''}>最新优先</option><option value="oldest" ${state.order === 'oldest' ? 'selected' : ''}>最早优先</option></select>${icons.chevron}</label>
       </div>
       ${state.tag ? `<button type="button" class="tag active-tag" data-action="clear-tag">${escapeHtml(state.tag)} ${icons.close}</button>` : ''}
-      <div class="document-list">
-        ${visible.length ? visible.map(documentRow).join('') : `<div class="empty">${icons.inbox}<h2>${state.query ? '没有匹配的文档' : '这里还没有文档'}</h2>
+      ${managing ? '<p class="management-note">本机文档在这里编辑和删除。已发布文档通过 GitHub 更新。</p>' : ''}
+      <div class="document-list${managing ? ' management-list' : ''}">
+        ${visible.length ? visible.map(doc => documentRow(doc, managing)).join('') : `<div class="empty">${icons.inbox}<h2>${state.query ? '没有匹配的文档' : '这里还没有文档'}</h2>
           <p>${state.query ? '试试其他关键词。' : state.scope === 'bookmarks' ? '点击文档右侧的收藏按钮，就可以在这里找到它。' : '导入飞书文档或 Markdown，将它加入知识库。'}</p>
           ${state.query ? '<button type="button" class="button secondary" data-action="clear-search">清除搜索</button>' : state.scope === 'bookmarks' ? '<button type="button" class="button secondary" data-nav="all">浏览文档</button>' : '<button type="button" class="button primary" data-action="import">导入文档</button>'}
         </div>`}
@@ -292,7 +296,6 @@ function renderReader(doc) {
           <div class="reader-actions">
             <button type="button" class="button secondary" data-action="bookmark" data-id="${escapeHtml(doc.id)}" aria-pressed="${selected}">${icons.bookmark} ${selected ? '已收藏' : '收藏'}</button>
             <button type="button" class="button secondary" data-action="download">${icons.download} Markdown</button>
-            ${managementControls(doc)}
             ${doc.local ? `<button type="button" class="button primary" data-action="publish">${icons.github} 发布到 GitHub</button>` : ''}
           </div>
         </header>
@@ -324,13 +327,18 @@ function renderReader(doc) {
 function render() {
   const docs = allDocuments();
   const doc = docs.find(item => item.id === documentId());
+  const managing = isAdmin();
+  adminLink.classList.toggle('active', managing);
+  if (managing) adminLink.setAttribute('aria-current', 'page');
+  else adminLink.removeAttribute('aria-current');
+  search.setAttribute('aria-label', managing ? '搜索管理文档' : '搜索全部文档');
   renderNav(docs);
   if (doc) renderReader(doc);
   else if (documentId()) {
     document.querySelector('#breadcrumb-current').textContent = '文档';
     main.innerHTML = `<div class="empty missing">${icons.inbox}<h1>找不到此文档</h1><p>本机文档只能在保存它的浏览器里打开。</p><button class="button secondary" type="button" data-nav="all">返回全部文档</button></div>`;
   } else renderLibrary(docs);
-  document.title = doc ? `${doc.title} · 知屿` : '知屿 · 个人知识库';
+  document.title = doc ? `${doc.title} · 知屿` : managing ? '后台管理 · 知屿' : '知屿 · 个人知识库';
 }
 
 function downloadDocument() {
@@ -393,7 +401,7 @@ const actions = {
     bookmarks.delete(id);
     try { saveBookmarks(bookmarks); } catch { /* The removed document is no longer displayed. */ }
     deleteDialog.close();
-    showLibrary();
+    render();
     const heading = main.querySelector('#documents-heading');
     heading?.setAttribute('tabindex', '-1');
     heading?.focus({ preventScroll: true });
@@ -414,9 +422,14 @@ app.addEventListener('click', event => {
   event.preventDefault();
   if (item.dataset.nav) {
     clearFilters();
+    toggleMenu(false);
+    if (item.dataset.nav === 'admin') {
+      if (isAdmin()) render();
+      else location.hash = 'admin';
+      return;
+    }
     if (item.dataset.nav.startsWith('category/')) state.category = item.dataset.nav.slice('category/'.length);
     else if (item.dataset.nav !== 'all') state.scope = item.dataset.nav;
-    toggleMenu(false);
     showLibrary();
     window.scrollTo(0, 0);
   } else if (item.dataset.tag) {
@@ -431,7 +444,8 @@ search.addEventListener('input', () => {
   const query = search.value;
   clearFilters();
   state.query = search.value = query;
-  showLibrary();
+  if (isAdmin()) render();
+  else showLibrary();
   window.scrollTo(0, 0);
 });
 
