@@ -1,6 +1,6 @@
 import './style.css';
 import { filterDocuments, serializeDocument } from './documents.js';
-import { loadPublished, loadDrafts, loadBookmarks, saveDrafts, saveBookmarks } from './store.js';
+import { loadPublished, loadLegacyDrafts, loadDrafts, loadBookmarks, writeDraft, deleteDraft, saveBookmarks } from './store.js';
 import { icons } from './icons.js';
 import { importDialog, installImportDialog } from './import-dialog.js';
 import { renderMarkdown } from './render-markdown.js';
@@ -13,8 +13,9 @@ const categoryInfo = {
 };
 
 const published = loadPublished();
-let drafts = loadDrafts();
+let drafts = loadLegacyDrafts();
 let bookmarks = loadBookmarks();
+const draftChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('zhiyu-drafts') : null;
 const state = { query: '', category: '', scope: '', tag: '', order: 'newest' };
 
 function allDocuments() {
@@ -106,10 +107,10 @@ function toast(message) {
   toastTimer = setTimeout(() => { notice.hidden = true; }, 3000);
 }
 
-function saveDraft(doc) {
-  const next = [doc, ...loadDrafts().filter(item => item.id !== doc.id)];
-  saveDrafts(next);
-  drafts = next;
+async function saveDraft(doc, editing) {
+  await writeDraft(doc, editing);
+  drafts = await loadDrafts();
+  draftChannel?.postMessage('changed');
   if (isAdmin()) render();
   else openDocument(doc.id);
   toast('文档已保存到本机');
@@ -186,7 +187,7 @@ function categoryIcon(category) {
 }
 
 function docPreview(doc) {
-  const line = doc.body.split('\n').find(text => text.trim() && !/^[#|<`>-]/.test(text.trim())) || '';
+  const line = doc.body.split('\n').find(text => text.trim() && !/^(?:[#|<`>-]|!\[)/.test(text.trim())) || '';
   return line.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`]/g, '').slice(0, 120);
 }
 
@@ -369,7 +370,7 @@ deleteDialog.addEventListener('close', () => {
 const actions = {
   import: () => openImport(),
   edit: button => {
-    const doc = loadDrafts().find(item => item.id === button.dataset.id);
+    const doc = drafts.find(item => item.id === button.dataset.id);
     if (doc) openImport(doc);
   },
   back: showLibrary,
@@ -378,25 +379,27 @@ const actions = {
   publish: () => publishDialog.showModal(),
   'close-publish': () => publishDialog.close(),
   delete: button => {
-    const doc = loadDrafts().find(item => item.id === button.dataset.id);
+    const doc = drafts.find(item => item.id === button.dataset.id);
     if (!doc) return;
     pendingDelete = doc.id;
     deleteName.textContent = doc.title;
     deleteDialog.showModal();
   },
   'close-delete': () => deleteDialog.close(),
-  'confirm-delete': () => {
+  'confirm-delete': async button => {
     const id = pendingDelete;
-    if (!id) return;
-    const next = loadDrafts().filter(doc => doc.id !== id);
+    if (!id || button.disabled) return;
+    button.disabled = true;
     try {
-      saveDrafts(next);
+      await deleteDraft(id);
+      drafts = await loadDrafts();
     } catch {
       toast('删除失败，请检查浏览器存储设置');
-      deleteDialog.close();
       return;
+    } finally {
+      button.disabled = false;
     }
-    drafts = next;
+    draftChannel?.postMessage('changed');
     bookmarks = loadBookmarks();
     bookmarks.delete(id);
     try { saveBookmarks(bookmarks); } catch { /* The removed document is no longer displayed. */ }
@@ -463,10 +466,20 @@ window.addEventListener('hashchange', () => {
 });
 window.addEventListener('popstate', render);
 window.addEventListener('storage', () => {
-  drafts = loadDrafts();
   bookmarks = loadBookmarks();
   render();
 });
+
+async function refreshDrafts() {
+  try {
+    drafts = await loadDrafts();
+    render();
+  } catch {
+    toast('无法读取本机文档，请检查浏览器存储设置');
+  }
+}
+
+draftChannel?.addEventListener('message', refreshDrafts);
 
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return;
@@ -479,3 +492,4 @@ document.addEventListener('keydown', event => {
 });
 
 render();
+refreshDrafts();

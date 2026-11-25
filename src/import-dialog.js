@@ -2,11 +2,14 @@ import { DEFAULT_CATEGORY, parseDocument, safeHttpUrl } from './documents.js';
 import { icons } from './icons.js';
 import { clipboardMarkdown } from './render-markdown.js';
 
+const MAX_DOCUMENT_SIZE = 25_000_000;
+
 export function installImportDialog(dialog, save, categories) {
   const form = dialog.querySelector('form');
   const field = name => form.elements.namedItem(name);
   const notice = dialog.querySelector('.form-error');
   const fileInput = dialog.querySelector('input[type=file]');
+  const submitButton = form.querySelector('[type=submit]');
   let existing;
 
   function fill(doc) {
@@ -21,7 +24,7 @@ export function installImportDialog(dialog, save, categories) {
     const file = fileInput.files[0];
     if (!file) return;
     try {
-      if (file.size > 2_000_000) throw new Error('文件过大，请选择 2 MB 以内的文档。');
+      if (file.size > MAX_DOCUMENT_SIZE) throw new Error('文件过大，请选择 25 MB 以内的文档。');
       const doc = parseDocument(await file.text(), { fallbackTitle: file.name.replace(/\.(md|markdown|txt)$/i, '') });
       fill(doc);
       notice.textContent = '';
@@ -46,12 +49,17 @@ export function installImportDialog(dialog, save, categories) {
     body.setRangeText(markdown, body.selectionStart, body.selectionEnd, 'end');
   });
 
-  form.addEventListener('submit', event => {
+  form.addEventListener('submit', async event => {
     event.preventDefault();
+    if (submitButton.disabled) return;
     const markdown = field('body').value.trim();
     if (!markdown) {
       notice.textContent = '请粘贴正文或导入文件。';
       field('body').focus();
+      return;
+    }
+    if (markdown.length > MAX_DOCUMENT_SIZE) {
+      notice.textContent = '正文超过 25 MB，请缩小图片或拆分文档。';
       return;
     }
     const source = field('source').value.trim();
@@ -60,10 +68,11 @@ export function installImportDialog(dialog, save, categories) {
       field('source').focus();
       return;
     }
+    submitButton.disabled = true;
     try {
       const doc = parseDocument(markdown);
       const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
-      save({
+      await save({
         id: existing?.id || `${date}-${crypto.randomUUID()}`,
         title: field('title').value.trim() || doc.title,
         category: field('category').value.trim() || doc.category,
@@ -72,11 +81,14 @@ export function installImportDialog(dialog, save, categories) {
         date: existing?.date || date,
         body: doc.title === '未命名文档' ? markdown : doc.body || markdown,
         local: true,
-      });
+      }, Boolean(existing));
       dialog.close();
     } catch (error) {
-      notice.textContent = error.name.startsWith('YAML')
+      if (error.name === 'MissingDraftError') notice.textContent = error.message;
+      else notice.textContent = error.name.startsWith('YAML')
         ? '无法读取正文开头的 Markdown 元数据。' : '保存失败，请检查浏览器存储空间或隐私设置。';
+    } finally {
+      submitButton.disabled = false;
     }
   });
 
@@ -119,7 +131,7 @@ export const importDialog = `
           <button type="button" class="text-button" data-file-button>${icons.upload} 选择文件</button>
           <input type="file" hidden accept=".md,.markdown,.txt">
         </div>
-        <textarea name="body" id="import-body" rows="8" maxlength="2000000" placeholder="在这里粘贴飞书文档或 Markdown…"></textarea>
+        <textarea name="body" id="import-body" rows="8" maxlength="25000000" placeholder="在这里粘贴飞书文档或 Markdown…"></textarea>
         <p class="form-error" aria-live="polite"></p>
       </div>
       <footer class="dialog-footer">
