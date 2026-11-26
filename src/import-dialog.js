@@ -12,11 +12,12 @@ export function installImportDialog(dialog, save, categories) {
   const submitButton = form.querySelector('[type=submit]');
   let existing;
 
-  function fill(doc) {
+  function fill(doc, preserveDate = false) {
     field('title').value = doc.title;
     field('category').value = doc.category;
     field('tags').value = doc.tags.join('、');
     field('source').value = doc.source;
+    if (!preserveDate || doc.date) field('date').value = doc.date || '';
     field('body').value = doc.body;
   }
 
@@ -26,7 +27,7 @@ export function installImportDialog(dialog, save, categories) {
     try {
       if (file.size > MAX_DOCUMENT_SIZE) throw new Error('文件过大，请选择 25 MB 以内的文档。');
       const doc = parseDocument(await file.text(), { fallbackTitle: file.name.replace(/\.(md|markdown|txt)$/i, '') });
-      fill(doc);
+      fill(doc, true);
       notice.textContent = '';
       field('title').focus();
     } catch (error) {
@@ -78,7 +79,7 @@ export function installImportDialog(dialog, save, categories) {
         category: field('category').value.trim() || doc.category,
         tags: [...new Set(field('tags').value.split(/[,，、]/).map(tag => tag.trim()).filter(Boolean))],
         source: safeHttpUrl(source),
-        date: existing?.date || date,
+        date: field('date').value,
         body: doc.title === '未命名文档' ? markdown : doc.body || markdown,
         local: true,
       }, Boolean(existing));
@@ -104,7 +105,10 @@ export function installImportDialog(dialog, save, categories) {
       return option;
     }));
     if (doc) fill(doc);
-    else field('category').value = DEFAULT_CATEGORY;
+    else {
+      field('category').value = DEFAULT_CATEGORY;
+      field('date').value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    }
     dialog.showModal();
     field(doc ? 'title' : 'body').focus();
   };
@@ -126,6 +130,9 @@ export const importDialog = `
         <div class="field-row">
           <label>标签<input name="tags" maxlength="150" placeholder="用逗号分隔"></label>
           <label>原文链接 <span>可选</span><input name="source" type="url" placeholder="https://…"></label>
+        </div>
+        <div class="field-row">
+          <label>日期<input name="date" type="date"></label>
         </div>
         <div class="body-label"><label for="import-body">正文</label>
           <button type="button" class="text-button" data-file-button>${icons.upload} 选择文件</button>
