@@ -4,6 +4,7 @@ import { loadPublished, loadLegacyDrafts, loadDrafts, loadBookmarks, writeDraft,
 import { icons } from './icons.js';
 import { importDialog, installImportDialog } from './import-dialog.js';
 import { renderMarkdown } from './render-markdown.js';
+import { shareDialog, installShareDialog } from './share-dialog.js';
 
 const categoryInfo = {
   产品需求: { icon: 'file', color: 'violet' },
@@ -64,6 +65,7 @@ app.innerHTML = `
         <div class="breadcrumb"><span>知识库</span>${icons.chevronRight}<strong id="breadcrumb-current">总览</strong></div>
         <div class="topbar-actions">
           <label class="search">${icons.search}<input type="search" id="search" placeholder="搜索文档…" aria-label="搜索全部文档"><kbd>/</kbd></label>
+          <button type="button" class="button secondary" data-action="share">${icons.link}<span>分享</span></button>
           <button type="button" class="button primary" data-action="import">${icons.plus}<span>导入文档</span></button>
         </div>
       </header>
@@ -71,6 +73,7 @@ app.innerHTML = `
     </div>
   </div>
   ${importDialog}
+  ${shareDialog}
   <dialog id="publish-dialog" class="publish-dialog" aria-labelledby="publish-title">
     <h2 id="publish-title">发布到 GitHub</h2>
     <p>下载 Markdown 后，上传到仓库的 <code>content/</code> 目录。提交到 <code>main</code> 后，GitHub Actions 会重新部署网站。</p>
@@ -97,6 +100,7 @@ const search = document.querySelector('#search');
 const nav = document.querySelector('.side-navigation');
 const adminLink = document.querySelector('[data-nav="admin"]');
 const openImport = installImportDialog(document.querySelector('#import-dialog'), saveDraft, categories);
+const openShare = installShareDialog(document.querySelector('#share-dialog'), repository);
 let toastTimer;
 
 function toast(message) {
@@ -230,16 +234,20 @@ function documentRow(doc, managing) {
     </article>`;
 }
 
+function visibleDocuments(docs, managing) {
+  const visible = managing
+    ? filterDocuments(docs, { query: state.query })
+    : filterDocuments(docs, state).filter(doc => state.scope !== 'bookmarks' || bookmarks.has(doc.id));
+  const direction = state.order === 'newest' ? -1 : 1;
+  return visible.sort((first, second) => direction * first.date.localeCompare(second.date) || first.title.localeCompare(second.title, 'zh-CN'));
+}
+
 function renderLibrary(docs) {
   const managing = isAdmin();
   const all = !managing && !state.query && !state.category && !state.scope && !state.tag;
   const activeTitle = managing ? '后台管理' : state.query ? '搜索结果' : state.category || (state.scope === 'local' ? '本机文档' : state.scope === 'bookmarks' ? '我的收藏' : state.tag || '总览');
   document.querySelector('#breadcrumb-current').textContent = activeTitle;
-  const visible = managing
-    ? filterDocuments(docs, { query: state.query })
-    : filterDocuments(docs, state).filter(doc => state.scope !== 'bookmarks' || bookmarks.has(doc.id));
-  const direction = state.order === 'newest' ? -1 : 1;
-  visible.sort((first, second) => direction * first.date.localeCompare(second.date) || first.title.localeCompare(second.title, 'zh-CN'));
+  const visible = visibleDocuments(docs, managing);
   main.innerHTML = `
     ${all ? `<section class="hero" aria-labelledby="welcome-title">
       <div class="hero-copy">
@@ -369,6 +377,13 @@ deleteDialog.addEventListener('close', () => {
 
 const actions = {
   import: () => openImport(),
+  share: () => {
+    const doc = currentDocument();
+    const heading = main.querySelector('#documents-heading');
+    const title = doc?.title || (heading?.textContent === '最近文档' ? '全部文档' : heading?.textContent) || '知屿';
+    const documents = doc ? [doc] : heading ? visibleDocuments(allDocuments(), isAdmin()) : [];
+    openShare(title, documents);
+  },
   edit: button => {
     const doc = drafts.find(item => item.id === button.dataset.id);
     if (doc) openImport(doc);

@@ -290,3 +290,34 @@ dialog::backdrop { background: #24203365; backdrop-filter: blur(2px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
+
+.share-field { display: block; font-size: 13px; font-weight: 650; }
+.share-field input {
+  display: block; width: 100%; min-width: 0; padding: 9px 10px; margin-top: 6px;
+  border: 1px solid var(--line); border-radius: 7px; background: #fcfbff; color: var(--text);
+  font: inherit; font-weight: 400;
+}
+.share-inline { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.share-inline input { margin-top: 0; }
+.share-inline button { flex-shrink: 0; }
+.share-status { min-height: 1.5em; color: var(--subtle); font-size: 13px; margin: 10px 0 0; }
+[data-share-result] > p { font-size: 13px; color: var(--subtle); line-height: 1.6; }
+[data-share-result] .share-field { margin: 14px 0 9px; }
+
+.shared-topbar { justify-content: space-between; padding-inline: clamp(16px, 5vw, 64px); }
+.shared-topbar .brand { margin: 0; }
+.shared-main { width: min(100% - 32px, 960px); margin: clamp(24px, 6vw, 62px) auto; }
+.shared-gate { width: min(100%, 440px); margin: 0 auto; }
+.shared-gate h1 { margin: 0; }
+.shared-gate > p { color: var(--subtle); }
+.shared-gate form { display: grid; gap: 14px; }
+.shared-gate form button { justify-self: start; }
+.shared-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.shared-heading h1 { margin: 0; overflow-wrap: anywhere; }
+.shared-row { display: grid; gap: 8px; padding: 16px 20px; }
+.shared-row + .shared-row { border-top: 1px solid var(--line); }
+.shared-row:hover { background: #fcfbff; }
+.shared-row:focus-visible { outline-offset: -3px; }
+.shared-row strong { overflow-wrap: anywhere; }
+.shared-meta .tag { cursor: inherit; }
+.shared-main .markdown { overflow-wrap: anywhere; }
