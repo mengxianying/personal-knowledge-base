@@ -3,6 +3,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: './',
   build: {
-    rolldownOptions: { input: ['index.html', 'share.html'] },
+    rolldownOptions: { input: ['index.html', 'share.html', 'article.html'] },
   },
 });

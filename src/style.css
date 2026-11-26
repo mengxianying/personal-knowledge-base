@@ -301,8 +301,8 @@ dialog::backdrop { background: #24203365; backdrop-filter: blur(2px); }
 .share-inline input { margin-top: 0; }
 .share-inline button { flex-shrink: 0; }
 .share-status { min-height: 1.5em; color: var(--subtle); font-size: 13px; margin: 10px 0 0; }
-[data-share-result] > p { font-size: 13px; color: var(--subtle); line-height: 1.6; }
-[data-share-result] .share-field { margin: 14px 0 9px; }
+.share-description { font-size: 13px; color: var(--subtle); line-height: 1.6; margin-top: 0; }
+#share-dialog .share-status:empty { display: none; }
 
 .shared-topbar { justify-content: space-between; padding-inline: clamp(16px, 5vw, 64px); }
 .shared-topbar .brand { margin: 0; }

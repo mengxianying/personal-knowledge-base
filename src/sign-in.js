@@ -4,9 +4,9 @@ import { signInWithGitHub } from './github-access.js';
 
 const app = document.querySelector('#app');
 const tokenSettings = new URL('https://github.com/settings/personal-access-tokens/new');
-tokenSettings.searchParams.set('name', '知屿只读登录');
+tokenSettings.searchParams.set('name', '知屿登录与文章分享');
 tokenSettings.searchParams.set('target_name', 'mengxianying');
-tokenSettings.searchParams.set('contents', 'read');
+tokenSettings.searchParams.set('contents', 'write');
 
 app.innerHTML = `
   <main class="owner-sign-in">
@@ -18,7 +18,7 @@ app.innerHTML = `
         <label class="share-field">GitHub 访问令牌
           <input type="password" required autocomplete="off" spellcheck="false" maxlength="256" aria-describedby="sign-in-help">
         </label>
-        <p id="sign-in-help">创建令牌时选择 <code>personal-knowledge-base</code> 仓库，并给 Contents「只读」权限。</p>
+        <p id="sign-in-help">创建令牌时选择 <code>personal-knowledge-base</code> 仓库。浏览可用 Contents「只读」权限，生成分享链接需要「读写」权限。</p>
         <div class="owner-sign-in-actions">
           <button type="submit" class="button primary">验证并登录</button>
           <a href="${tokenSettings.href}" target="_blank" rel="noopener noreferrer">在 GitHub 创建令牌 ${icons.external}</a>

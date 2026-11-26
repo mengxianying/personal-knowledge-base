@@ -20,18 +20,21 @@ export function clipboardMarkdown(html) {
   return turndown.turndown(cleaned);
 }
 
-export function renderMarkdown(markdown) {
+export function renderMarkdown(markdown, { readOnly = false } = {}) {
   const fragment = DOMPurify.sanitize(marked.parse(markdown), {
     USE_PROFILES: { html: true },
-    FORBID_TAGS: ['style', 'form', 'iframe', 'input', 'button'],
-    FORBID_ATTR: ['style', 'srcset', 'id', 'name'],
+    FORBID_TAGS: ['style', 'form', 'iframe', 'input', 'button', ...(readOnly
+      ? ['select', 'textarea', 'details', 'summary', 'audio', 'video', 'dialog'] : [])],
+    FORBID_ATTR: ['style', 'srcset', 'id', 'name', ...(readOnly
+      ? ['contenteditable', 'role', 'tabindex', 'download'] : [])],
     RETURN_DOM_FRAGMENT: true,
   });
   for (const link of fragment.querySelectorAll('a[href]')) {
-    if (/^https?:\/\//i.test(link.getAttribute('href'))) {
+    const href = link.getAttribute('href');
+    if (/^https?:\/\//i.test(href)) {
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-    }
+    } else if (readOnly) link.removeAttribute('href');
   }
   for (const image of fragment.querySelectorAll('img')) {
     image.loading = 'lazy';

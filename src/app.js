@@ -69,7 +69,6 @@ app.innerHTML = `
         <div class="breadcrumb"><span>知识库</span>${icons.chevronRight}<strong id="breadcrumb-current">总览</strong></div>
         <div class="topbar-actions">
           <label class="search">${icons.search}<input type="search" id="search" placeholder="搜索文档…" aria-label="搜索全部文档"><kbd>/</kbd></label>
-          <button type="button" class="button secondary" data-action="share">${icons.link}<span>分享</span></button>
           <button type="button" class="button primary" data-action="import">${icons.plus}<span>导入文档</span></button>
         </div>
       </header>
@@ -104,7 +103,7 @@ const search = document.querySelector('#search');
 const nav = document.querySelector('.side-navigation');
 const adminLink = document.querySelector('[data-nav="admin"]');
 const openImport = installImportDialog(document.querySelector('#import-dialog'), saveDraft, categories);
-const openShare = installShareDialog(document.querySelector('#share-dialog'), repository);
+const openShare = installShareDialog(document.querySelector('#share-dialog'));
 let toastTimer;
 
 function toast(message) {
@@ -307,6 +306,7 @@ function renderReader(doc) {
             ${doc.source ? `<a href="${escapeHtml(doc.source)}" target="_blank" rel="noopener noreferrer">${icons.link} 查看原文</a>` : ''}
           </div>
           <div class="reader-actions">
+            <button type="button" class="button secondary" data-action="share" title="生成无需登录的只读链接">${icons.link} 分享</button>
             <button type="button" class="button secondary" data-action="bookmark" data-id="${escapeHtml(doc.id)}" aria-pressed="${selected}">${icons.bookmark} ${selected ? '已收藏' : '收藏'}</button>
             <button type="button" class="button secondary" data-action="download">${icons.download} Markdown</button>
             ${doc.local ? `<button type="button" class="button primary" data-action="publish">${icons.github} 发布到 GitHub</button>` : ''}
@@ -384,10 +384,7 @@ const actions = {
   'sign-out': () => location.reload(),
   share: () => {
     const doc = currentDocument();
-    const heading = main.querySelector('#documents-heading');
-    const title = doc?.title || (heading?.textContent === '最近文档' ? '全部文档' : heading?.textContent) || '知屿';
-    const documents = doc ? [doc] : heading ? visibleDocuments(allDocuments(), isAdmin()) : [];
-    openShare(title, documents);
+    if (doc) openShare(doc);
   },
   edit: button => {
     const doc = drafts.find(item => item.id === button.dataset.id);
