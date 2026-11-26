@@ -19,6 +19,7 @@ export const loadLegacyDrafts = () => readList(DRAFTS_KEY).filter(validDraft);
 const databaseName = 'zhiyu-local-documents';
 const storeName = 'drafts';
 let databasePromise;
+let indexedDbDisabled = false;
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -32,9 +33,16 @@ function openDatabase() {
 function useStore(database, mode, run) {
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(storeName, mode);
-    const request = run(transaction.objectStore(storeName));
+    let request;
+    try {
+      request = run(transaction.objectStore(storeName));
+    } catch (error) {
+      reject(error);
+      return;
+    }
     transaction.oncomplete = () => resolve(request?.result);
-    transaction.onabort = () => reject(transaction.error);
+    transaction.onerror = () => reject(transaction.error || request?.error);
+    transaction.onabort = () => reject(transaction.error || request?.error);
   });
 }
 
@@ -57,6 +65,7 @@ async function migrateLegacyDrafts(database) {
 }
 
 function getDatabase() {
+  if (indexedDbDisabled) return Promise.reject(new Error('IndexedDB unavailable'));
   databasePromise ??= openDatabase().then(async database => {
     await migrateLegacyDrafts(database);
     return database;
@@ -67,35 +76,112 @@ function getDatabase() {
   return databasePromise;
 }
 
-export async function loadDrafts() {
-  const database = await getDatabase();
-  return useStore(database, 'readonly', store => store.getAll());
+function storageError(cause) {
+  const error = new Error('浏览器本机存储不可用或空间不足。请退出无痕模式、允许此网站使用存储空间，或清理站点数据后重试。', { cause });
+  error.name = 'StorageUnavailableError';
+  return error;
 }
 
-export async function writeDraft(doc, editing) {
-  const database = await getDatabase();
-  let written = false;
-  await useStore(database, 'readwrite', store => {
-    if (!editing) {
-      store.add(doc);
-      written = true;
-      return;
-    }
-    const request = store.getKey(doc.id);
-    request.onsuccess = () => {
-      if (request.result === undefined) return;
-      store.put(doc);
-      written = true;
-    };
-  });
-  if (!written) {
+async function legacyDrafts(database) {
+  const localDrafts = loadLegacyDrafts();
+  if (!database) return localDrafts;
+  try {
+    const databaseDrafts = await useStore(database, 'readonly', store => store.getAll());
+    const byId = new Map(localDrafts.map(doc => [doc.id, doc]));
+    for (const doc of databaseDrafts) byId.set(doc.id, doc);
+    return [...byId.values()];
+  } catch {
+    return localDrafts;
+  }
+}
+
+async function writeLegacyDraft(doc, editing, database) {
+  const drafts = await legacyDrafts(database);
+  if (editing && !drafts.some(item => item.id === doc.id)) {
     const error = new Error('这篇文档已被删除。');
     error.name = 'MissingDraftError';
     throw error;
   }
+  const next = editing
+    ? drafts.map(item => item.id === doc.id ? doc : item)
+    : [doc, ...drafts.filter(item => item.id !== doc.id)];
+  try {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(next));
+  } catch (error) {
+    throw storageError(error);
+  }
+}
+
+export async function loadDrafts() {
+  if (indexedDbDisabled) return loadLegacyDrafts();
+  try {
+    const database = await getDatabase();
+    return await useStore(database, 'readonly', store => store.getAll());
+  } catch (error) {
+    indexedDbDisabled = true;
+    databasePromise = undefined;
+    return loadLegacyDrafts();
+  }
+}
+
+export async function writeDraft(doc, editing) {
+  if (indexedDbDisabled) return writeLegacyDraft(doc, editing);
+  let database;
+  try {
+    database = await getDatabase();
+    let written = false;
+    await useStore(database, 'readwrite', store => {
+      if (!editing) {
+        store.add(doc);
+        written = true;
+        return;
+      }
+      const request = store.getKey(doc.id);
+      request.onsuccess = () => {
+        if (request.result === undefined) return;
+        store.put(doc);
+        written = true;
+      };
+    });
+    if (!written) {
+      const error = new Error('这篇文档已被删除。');
+      error.name = 'MissingDraftError';
+      throw error;
+    }
+  } catch (error) {
+    indexedDbDisabled = true;
+    databasePromise = undefined;
+    if (error.name === 'MissingDraftError') throw error;
+    try {
+      await writeLegacyDraft(doc, editing, database);
+    } catch (fallbackError) {
+      if (fallbackError.name === 'MissingDraftError') throw fallbackError;
+      throw storageError(error);
+    }
+  }
 }
 
 export async function deleteDraft(id) {
-  const database = await getDatabase();
-  return useStore(database, 'readwrite', store => store.delete(id));
+  if (indexedDbDisabled) return deleteLegacyDraft(id);
+  try {
+    const database = await getDatabase();
+    return await useStore(database, 'readwrite', store => store.delete(id));
+  } catch (error) {
+    indexedDbDisabled = true;
+    databasePromise = undefined;
+    try {
+      return await deleteLegacyDraft(id, database);
+    } catch {
+      throw storageError(error);
+    }
+  }
+}
+
+async function deleteLegacyDraft(id, database) {
+  const drafts = await legacyDrafts(database);
+  try {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts.filter(doc => doc.id !== id)));
+  } catch (error) {
+    throw storageError(error);
+  }
 }

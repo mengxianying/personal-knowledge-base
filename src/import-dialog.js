@@ -86,6 +86,7 @@ export function installImportDialog(dialog, save, categories) {
       dialog.close();
     } catch (error) {
       if (error.name === 'MissingDraftError') notice.textContent = error.message;
+      else if (error.name === 'StorageUnavailableError') notice.textContent = error.message;
       else notice.textContent = error.name.startsWith('YAML')
         ? '无法读取正文开头的 Markdown 元数据。' : '保存失败，请检查浏览器存储空间或隐私设置。';
     } finally {
