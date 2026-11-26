@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { publishArticleShare, signInWithGitHub } from '../src/github-access.js';
-import { readArticleShare, articleShareFileUrl } from '../src/article-share.js';
+import { readArticleShare, articleShareFileUrl, prepareArticleShare } from '../src/article-share.js';
 
 const page = 'https://mengxianying.github.io/personal-knowledge-base/?show=article#doc/test';
 const doc = { title: '分享文章', category: '产品需求', tags: ['流程'], date: '2026-11-26', source: 'https://example.com', body: '仅共享当前正文' };
@@ -17,6 +17,7 @@ test('publishes only encrypted article data and returns a link an anonymous visi
     }
     assert.equal(request.credentials, 'omit');
     assert.equal(request.headers?.Authorization, undefined);
+    if (new URL(url).origin === new URL(page).origin) return new Response(null, { status: 404 });
     const content = JSON.parse(upload[1].body).content;
     return new Response(atob(content));
   });
@@ -35,6 +36,19 @@ test('publishes only encrypted article data and returns a link an anonymous visi
   assert.equal(raw.includes(link.hash.slice(1)), false);
   assert.equal(articleShareFileUrl(link).origin, 'https://raw.githubusercontent.com');
   assert.deepEqual(await readArticleShare(link), { ...doc, id: '1', source: '' });
+});
+
+test('opens an existing share without contacting raw.githubusercontent.com', async t => {
+  const { id, link, content } = await prepareArticleShare(doc, page);
+  const fetch = t.mock.method(globalThis, 'fetch', async (url, request) => {
+    if (new URL(url).origin !== link.origin) throw new TypeError('Network unavailable');
+    assert.equal(url, new URL(`article-shares/${id}.json`, page).href);
+    assert.equal(request.credentials, 'omit');
+    assert.equal(new URL(url).hash, '');
+    return new Response(atob(content));
+  });
+  assert.deepEqual(await readArticleShare(link), { ...doc, id: '1', source: '' });
+  assert.equal(fetch.mock.callCount(), 1);
 });
 
 test('generates no link without the owner and reports read-only repository permission', async t => {

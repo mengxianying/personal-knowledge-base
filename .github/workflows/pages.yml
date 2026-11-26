@@ -29,6 +29,12 @@ jobs:
       - run: npm run build
         env:
           VITE_GITHUB_REPO: ${{ github.server_url }}/${{ github.repository }}
+      - uses: actions/checkout@v6
+        with:
+          ref: article-shares
+          path: .article-share-data
+          persist-credentials: false
+      - run: node scripts/stage-article-shares.js .article-share-data dist/article-shares
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist
