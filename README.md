@@ -4,6 +4,12 @@
 
 [打开知识库](https://mengxianying.github.io/personal-knowledge-base/)
 
+## 登录知识库
+
+管理、浏览、分享和导入入口只向通过 GitHub 验证的 `mengxianying` 开放。首次使用时，在 GitHub 创建细粒度访问令牌，选择 `personal-knowledge-base` 仓库，并给 Contents「只读」权限。将令牌输入知识库登录页完成验证。刷新或退出后需要重新验证。
+
+密码分享使用独立的只读访客链接。公开仓库中的 Markdown 文件仍按 GitHub 的仓库可见性提供访问。
+
 ## 从飞书导入
 
 1. 在飞书打开可访问的文档，复制正文。在网站点击「导入文档」，粘贴到正文框，也可以上传 Markdown 或 TXT 文件。

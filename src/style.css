@@ -321,3 +321,17 @@ dialog::backdrop { background: #24203365; backdrop-filter: blur(2px); }
 .shared-row strong { overflow-wrap: anywhere; }
 .shared-meta .tag { cursor: inherit; }
 .shared-main .markdown { overflow-wrap: anywhere; }
+
+.owner-sign-in {
+  display: grid; align-items: start; justify-items: center; min-height: 100dvh;
+  padding: clamp(40px, 11vh, 112px) 16px 32px;
+}
+.owner-sign-in-card { width: min(100%, 470px); padding: clamp(22px, 5vw, 38px); }
+.owner-sign-in-card .brand { margin: 0 0 22px; }
+.owner-sign-in-card h1 { margin: 0; font-size: 25px; }
+.owner-sign-in-card p { color: var(--subtle); font-size: 13px; line-height: 1.65; }
+.owner-sign-in-card form { margin-top: 22px; }
+.owner-sign-in-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; }
+.owner-sign-in-actions a { font-size: 13px; color: var(--accent-dark); }
+.owner-sign-in-actions a svg { width: 13px; height: 13px; }
+.owner-sign-in-card .share-status:empty { display: none; }

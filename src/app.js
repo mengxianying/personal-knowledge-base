@@ -1,6 +1,7 @@
 import './style.css';
 import { filterDocuments, serializeDocument } from './documents.js';
-import { loadPublished, loadLegacyDrafts, loadDrafts, loadBookmarks, writeDraft, deleteDraft, saveBookmarks } from './store.js';
+import { loadLegacyDrafts, loadDrafts, loadBookmarks, writeDraft, deleteDraft, saveBookmarks } from './store.js';
+import { getOwnerSession } from './github-access.js';
 import { icons } from './icons.js';
 import { importDialog, installImportDialog } from './import-dialog.js';
 import { renderMarkdown } from './render-markdown.js';
@@ -13,7 +14,9 @@ const categoryInfo = {
   模板资料: { icon: 'layers', color: 'green' },
 };
 
-const published = loadPublished();
+const ownerSession = getOwnerSession();
+if (!ownerSession) throw new Error('访问知识库前需要验证 GitHub 账号。');
+const published = ownerSession.documents;
 let drafts = loadLegacyDrafts();
 let bookmarks = loadBookmarks();
 const draftChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('zhiyu-drafts') : null;
@@ -56,6 +59,7 @@ app.innerHTML = `
       <div class="side-bottom">
         <a class="nav-button" href="#admin" data-nav="admin">${icons.layers}<span>后台管理</span></a>
         <button type="button" class="nav-button" data-action="repository">${icons.github}<span>GitHub 仓库</span>${icons.external}</button>
+        <button type="button" class="nav-button" data-action="sign-out">${icons.arrowLeft}<span>退出登录</span></button>
       </div>
     </aside>
     <button class="sidebar-scrim" aria-label="关闭菜单" data-action="menu"></button>
@@ -377,6 +381,7 @@ deleteDialog.addEventListener('close', () => {
 
 const actions = {
   import: () => openImport(),
+  'sign-out': () => location.reload(),
   share: () => {
     const doc = currentDocument();
     const heading = main.querySelector('#documents-heading');
@@ -508,3 +513,4 @@ document.addEventListener('keydown', event => {
 
 render();
 refreshDrafts();
+if (ownerSession.repositoryError) toast(ownerSession.repositoryError);

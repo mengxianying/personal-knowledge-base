@@ -1,15 +1,5 @@
-import { parseDocument } from './documents.js';
-
 const DRAFTS_KEY = 'zhiyu-documents-v1';
 const BOOKMARKS_KEY = 'zhiyu-bookmarks-v1';
-
-export function loadPublished() {
-  const files = import.meta.glob('../content/**/*.md', { eager: true, query: '?raw', import: 'default' });
-  return Object.entries(files).map(([path, markdown]) => {
-    const id = path.slice('../content/'.length, -3);
-    return parseDocument(markdown, { id, fallbackTitle: id.split('/').at(-1) });
-  });
-}
 
 function readList(key) {
   try {
