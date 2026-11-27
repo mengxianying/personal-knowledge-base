@@ -11,6 +11,7 @@ export function installImportDialog(dialog, save, categories) {
   const fileInput = dialog.querySelector('input[type=file]');
   const submitButton = form.querySelector('[type=submit]');
   let existing;
+  let documentId;
 
   function fill(doc, preserveDate = false) {
     field('title').value = doc.title;
@@ -74,21 +75,19 @@ export function installImportDialog(dialog, save, categories) {
       const doc = parseDocument(markdown);
       const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
       await save({
-        id: existing?.id || `${date}-${crypto.randomUUID()}`,
+        id: documentId ??= existing?.id || `${date}-${crypto.randomUUID()}`,
         title: field('title').value.trim() || doc.title,
         category: field('category').value.trim() || doc.category,
         tags: [...new Set(field('tags').value.split(/[,，、]/).map(tag => tag.trim()).filter(Boolean))],
         source: safeHttpUrl(source),
         date: field('date').value,
         body: doc.title === '未命名文档' ? markdown : doc.body || markdown,
-        local: true,
-      }, Boolean(existing));
+      }, existing);
       dialog.close();
     } catch (error) {
-      if (error.name === 'MissingDraftError') notice.textContent = error.message;
-      else if (error.name === 'StorageUnavailableError') notice.textContent = error.message;
+      if (error.name === 'CloudDocumentError') notice.textContent = error.message;
       else notice.textContent = error.name.startsWith('YAML')
-        ? '无法读取正文开头的 Markdown 元数据。' : '保存失败，请检查浏览器存储空间或隐私设置。';
+        ? '无法读取正文开头的 Markdown 元数据。' : '云端保存失败，请稍后重试。';
     } finally {
       submitButton.disabled = false;
     }
@@ -96,9 +95,10 @@ export function installImportDialog(dialog, save, categories) {
 
   return doc => {
     existing = doc;
+    documentId = undefined;
     form.reset();
     notice.textContent = '';
-    dialog.querySelector('h2').textContent = doc ? '编辑本机文档' : '导入文档';
+    dialog.querySelector('h2').textContent = doc ? '编辑文档' : '导入文档';
     const categoryOptions = dialog.querySelector('datalist');
     categoryOptions.replaceChildren(...categories().map(category => {
       const option = document.createElement('option');
@@ -143,9 +143,9 @@ export const importDialog = `
         <p class="form-error" aria-live="polite"></p>
       </div>
       <footer class="dialog-footer">
-        <span>保存在当前浏览器</span>
+        <span>存入 GitHub 私有仓库</span>
         <button type="button" class="button secondary" data-close>取消</button>
-        <button type="submit" class="button primary">保存到本机</button>
+        <button type="submit" class="button primary">保存到云端</button>
       </footer>
     </form>
   </dialog>`;

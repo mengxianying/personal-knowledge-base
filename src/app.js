@@ -1,6 +1,6 @@
 import './style.css';
 import { filterDocuments, serializeDocument } from './documents.js';
-import { loadLegacyDrafts, loadDrafts, loadBookmarks, writeDraft, deleteDraft, saveBookmarks } from './store.js';
+import { loadLegacyDrafts, loadDrafts, loadBookmarks, deleteDraft, saveBookmarks } from './store.js';
 import { getOwnerSession } from './github-access.js';
 import { icons } from './icons.js';
 import { importDialog, installImportDialog } from './import-dialog.js';
@@ -18,13 +18,16 @@ const ownerSession = getOwnerSession();
 if (!ownerSession) throw new Error('访问知识库前需要验证 GitHub 账号。');
 const published = ownerSession.documents;
 let drafts = loadLegacyDrafts();
+let cloudDocuments = [];
+let cloudRead;
 let bookmarks = loadBookmarks();
 const draftChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('zhiyu-drafts') : null;
 const state = { query: '', category: '', scope: '', tag: '', order: 'newest' };
 
 function allDocuments() {
-  const publishedIds = new Set(published.map(doc => doc.id));
-  return [...published, ...drafts.filter(doc => !publishedIds.has(doc.id))];
+  const remote = [...published, ...cloudDocuments];
+  const remoteIds = new Set(remote.map(doc => doc.id));
+  return [...remote, ...drafts.filter(doc => !remoteIds.has(doc.id))];
 }
 
 function categories() {
@@ -72,6 +75,7 @@ app.innerHTML = `
           <button type="button" class="button primary" data-action="import">${icons.plus}<span>导入文档</span></button>
         </div>
       </header>
+      <div class="cloud-status" role="status" hidden></div>
       <main id="main-content" class="content"></main>
     </div>
   </div>
@@ -88,9 +92,9 @@ app.innerHTML = `
     </footer>
   </dialog>
   <dialog id="delete-dialog" class="publish-dialog" aria-labelledby="delete-title">
-    <h2 id="delete-title">删除本机文档？</h2>
+    <h2 id="delete-title">删除文档？</h2>
     <p><strong id="delete-document-name"></strong></p>
-    <p>这会从当前浏览器里移除文档和它的收藏记录。</p>
+    <p>确认后删除这篇文档。</p>
     <footer class="dialog-footer">
       <button class="button secondary" type="button" data-action="close-delete" autofocus>取消</button>
       <button class="button danger" type="button" data-action="confirm-delete">删除文档</button>
@@ -114,13 +118,22 @@ function toast(message) {
   toastTimer = setTimeout(() => { notice.hidden = true; }, 3000);
 }
 
-async function saveDraft(doc, editing) {
-  await writeDraft(doc, editing);
-  drafts = await loadDrafts();
-  draftChannel?.postMessage('changed');
+async function saveDraft(doc, existing) {
+  if (cloudRead) await cloudRead;
+  const saved = await ownerSession.privateDocuments.save(doc, existing?.sha);
+  cloudDocuments = [...cloudDocuments.filter(item => item.id !== saved.id), saved];
+  if (existing?.local) {
+    try {
+      await deleteDraft(saved.id);
+      drafts = await loadDrafts();
+      draftChannel?.postMessage('changed');
+    } catch {
+      drafts = drafts.filter(item => item.id !== saved.id);
+    }
+  }
   if (isAdmin()) render();
-  else openDocument(doc.id);
-  toast('文档已保存到本机');
+  else openDocument(saved.id);
+  toast('文档已保存到云端');
 }
 
 function updateBookmark(id) {
@@ -203,14 +216,15 @@ function formatDate(date) {
 }
 
 function managementControls(doc) {
-  if (!doc.local && !repository) return '';
+  const editable = doc.local || doc.cloud;
+  if (!editable && !repository) return '';
   const path = doc.id.split('/').map(encodeURIComponent).join('/') + '.md';
   return [['edit', '编辑', icons.edit], ['delete', '删除', icons.trash]].map(([action, verb, icon]) => {
-    const label = doc.local ? verb : '在 GitHub ' + verb;
+    const label = editable ? verb : '在 GitHub ' + verb;
     const className = action === 'delete' ? 'button secondary delete-button' : 'button secondary';
     const attributes = `class="${className}" aria-label="${escapeHtml(label + ' ' + doc.title)}" title="${label}"`;
     const content = `${icon}<span>${verb}</span>`;
-    if (doc.local) {
+    if (editable) {
       return `<button type="button" ${attributes} data-action="${action}" data-id="${escapeHtml(doc.id)}">${content}</button>`;
     }
     const url = escapeHtml(`${repository}/${action}/main/content/${path}`);
@@ -225,7 +239,7 @@ function documentRow(doc, managing) {
       <a class="document-link" href="${documentUrl(doc.id)}">
         ${categoryIcon(doc.category)}
         <span class="document-summary">
-          <strong>${escapeHtml(doc.title)}${doc.local ? '<small class="local-label">本机</small>' : ''}</strong>
+          <strong>${escapeHtml(doc.title)}${doc.local ? '<small class="local-label">本机</small>' : doc.cloud ? '<small class="local-label">云端</small>' : ''}</strong>
           <span>${escapeHtml(docPreview(doc) || '查看文档正文')}</span>
         </span>
         <span class="row-tags">${doc.tags.slice(0, 2).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</span>
@@ -281,7 +295,7 @@ function renderLibrary(docs) {
         <label class="sort"><select aria-label="排序"><option value="newest" ${state.order === 'newest' ? 'selected' : ''}>最新优先</option><option value="oldest" ${state.order === 'oldest' ? 'selected' : ''}>最早优先</option></select>${icons.chevron}</label>
       </div>
       ${state.tag ? `<button type="button" class="tag active-tag" data-action="clear-tag">${escapeHtml(state.tag)} ${icons.close}</button>` : ''}
-      ${managing ? '<p class="management-note">本机文档在这里编辑和删除。已发布文档通过 GitHub 更新。</p>' : ''}
+      ${managing ? '<p class="management-note">在这里管理云端文档。本机旧文档可在编辑后保存到云端。</p>' : ''}
       <div class="document-list${managing ? ' management-list' : ''}">
         ${visible.length ? visible.map(doc => documentRow(doc, managing)).join('') : `<div class="empty">${icons.inbox}<h2>${state.query ? '没有匹配的文档' : '这里还没有文档'}</h2>
           <p>${state.query ? '试试其他关键词。' : state.scope === 'bookmarks' ? '点击文档右侧的收藏按钮，就可以在这里找到它。' : '导入飞书文档或 Markdown，将它加入知识库。'}</p>
@@ -299,7 +313,7 @@ function renderReader(doc) {
     <div class="reader-layout">
       <article class="reader">
         <header class="reader-header">
-          <div class="reader-category">${categoryIcon(doc.category)}<span>${escapeHtml(doc.category)}</span>${doc.local ? '<small class="local-label">本机</small>' : ''}</div>
+          <div class="reader-category">${categoryIcon(doc.category)}<span>${escapeHtml(doc.category)}</span>${doc.local ? '<small class="local-label">本机</small>' : doc.cloud ? '<small class="local-label">云端</small>' : ''}</div>
           <h1>${escapeHtml(doc.title)}</h1>
           <div class="reader-meta"><time datetime="${escapeHtml(doc.date)}">${escapeHtml(formatDate(doc.date))}</time>
             ${doc.tags.map(tag => `<button type="button" class="tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join('')}
@@ -387,7 +401,7 @@ const actions = {
     if (doc) openShare(doc);
   },
   edit: button => {
-    const doc = drafts.find(item => item.id === button.dataset.id);
+    const doc = allDocuments().find(item => item.id === button.dataset.id && (item.local || item.cloud));
     if (doc) openImport(doc);
   },
   back: showLibrary,
@@ -396,22 +410,29 @@ const actions = {
   publish: () => publishDialog.showModal(),
   'close-publish': () => publishDialog.close(),
   delete: button => {
-    const doc = drafts.find(item => item.id === button.dataset.id);
+    const doc = allDocuments().find(item => item.id === button.dataset.id && (item.local || item.cloud));
     if (!doc) return;
-    pendingDelete = doc.id;
+    pendingDelete = doc;
     deleteName.textContent = doc.title;
     deleteDialog.showModal();
   },
   'close-delete': () => deleteDialog.close(),
   'confirm-delete': async button => {
-    const id = pendingDelete;
-    if (!id || button.disabled) return;
+    const doc = pendingDelete;
+    if (!doc || button.disabled) return;
+    if (cloudRead) await cloudRead;
+    const { id } = doc;
     button.disabled = true;
     try {
-      await deleteDraft(id);
-      drafts = await loadDrafts();
-    } catch {
-      toast('删除失败，请检查浏览器存储设置');
+      if (doc.cloud) {
+        await ownerSession.privateDocuments.remove(doc);
+        cloudDocuments = cloudDocuments.filter(item => item.id !== id);
+      } else {
+        await deleteDraft(id);
+        drafts = await loadDrafts();
+      }
+    } catch (error) {
+      toast(error.name === 'CloudDocumentError' ? error.message : '删除失败，请检查浏览器存储设置');
       return;
     } finally {
       button.disabled = false;
@@ -425,7 +446,7 @@ const actions = {
     const heading = main.querySelector('#documents-heading');
     heading?.setAttribute('tabindex', '-1');
     heading?.focus({ preventScroll: true });
-    toast('已删除本机文档');
+    toast('已删除文档');
   },
   repository: () => {
     if (repository) window.open(repository, '_blank', 'noopener,noreferrer');
@@ -508,6 +529,20 @@ document.addEventListener('keydown', event => {
   }
 });
 
+async function refreshCloudDocuments() {
+  const status = document.querySelector('.cloud-status');
+  status.textContent = '正在读取云端文档…';
+  status.hidden = false;
+  try {
+    cloudDocuments = await ownerSession.privateDocuments.list();
+    status.hidden = true;
+  } catch (error) {
+    status.textContent = error.name === 'CloudDocumentError' ? error.message : '云端文档加载失败，请重新登录重试。';
+  }
+  render();
+}
+
 render();
+cloudRead = refreshCloudDocuments().finally(() => { cloudRead = undefined; });
 refreshDrafts();
 if (ownerSession.repositoryError) toast(ownerSession.repositoryError);

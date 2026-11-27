@@ -335,3 +335,9 @@ dialog::backdrop { background: #24203365; backdrop-filter: blur(2px); }
 .owner-sign-in-actions a { font-size: 13px; color: var(--accent-dark); }
 .owner-sign-in-actions a svg { width: 13px; height: 13px; }
 .owner-sign-in-card .share-status:empty { display: none; }
+
+.cloud-status:not([hidden]) {
+  margin: 1rem clamp(1rem, 4vw, 3rem) 0;
+  color: var(--subtle);
+  font-size: .875rem;
+}

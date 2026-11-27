@@ -1,3 +1,4 @@
+import { openPrivateDocuments } from './private-documents.js';
 import { parseDocument } from './documents.js';
 import { ARTICLE_SHARE_BRANCH, prepareArticleShare } from './article-share.js';
 
@@ -62,7 +63,7 @@ export async function signInWithGitHub(value) {
     documents: [],
     repositoryError: '仓库文档未能加载，请检查令牌的 Contents 读取权限后重新登录。',
   }));
-  ownerSession = { login: OWNER_LOGIN, ...repository };
+  ownerSession = { login: OWNER_LOGIN, ...repository, privateDocuments: openPrivateDocuments(token) };
   ownerToken = token;
 }
 

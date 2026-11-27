@@ -18,7 +18,7 @@ app.innerHTML = `
         <label class="share-field">GitHub 访问令牌
           <input type="password" required autocomplete="off" spellcheck="false" maxlength="256" aria-describedby="sign-in-help">
         </label>
-        <p id="sign-in-help">创建令牌时选择 <code>personal-knowledge-base</code> 仓库。浏览可用 Contents「只读」权限，生成分享链接需要「读写」权限。</p>
+        <p id="sign-in-help">创建令牌时选择 <code>personal-knowledge-base</code> 和 <code>personal-knowledge-base-private</code> 两个仓库，并授予 Contents「读写」权限。</p>
         <div class="owner-sign-in-actions">
           <button type="submit" class="button primary">验证并登录</button>
           <a href="${tokenSettings.href}" target="_blank" rel="noopener noreferrer">在 GitHub 创建令牌 ${icons.external}</a>
