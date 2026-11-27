@@ -20,6 +20,7 @@ const published = ownerSession.documents;
 let drafts = loadLegacyDrafts();
 let cloudDocuments = [];
 let cloudRead;
+let cloudState = 'loading';
 let bookmarks = loadBookmarks();
 const draftChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('zhiyu-drafts') : null;
 const state = { query: '', category: '', scope: '', tag: '', order: 'newest' };
@@ -75,7 +76,10 @@ app.innerHTML = `
           <button type="button" class="button primary" data-action="import">${icons.plus}<span>导入文档</span></button>
         </div>
       </header>
-      <div class="cloud-status" role="status" hidden></div>
+      <div class="cloud-status" hidden>
+        <span role="status"></span>
+        <button type="button" class="text-button" data-action="reload-cloud" hidden>重试</button>
+      </div>
       <main id="main-content" class="content"></main>
     </div>
   </div>
@@ -189,7 +193,9 @@ function navButton({ label, icon, value, count, active }) {
 
 function renderNav(docs) {
   const current = documentId() ? '' : state.category ? `category/${state.category}` : state.scope || 'all';
-  const button = (label, icon, value, count) => navButton({ label, icon, value, count, active: current === value });
+  const button = (label, icon, value, count) => navButton({
+    label, icon, value, count: cloudState === 'ready' || value === 'local' ? count : '—', active: current === value,
+  });
   nav.innerHTML = `
     <div class="nav-group"><h2>浏览</h2>
       ${button('全部文档', 'layout', 'all', docs.length)}
@@ -265,6 +271,7 @@ function renderLibrary(docs) {
   const activeTitle = managing ? '后台管理' : state.query ? '搜索结果' : state.category || (state.scope === 'local' ? '本机文档' : state.scope === 'bookmarks' ? '我的收藏' : state.tag || '总览');
   document.querySelector('#breadcrumb-current').textContent = activeTitle;
   const visible = visibleDocuments(docs, managing);
+  const countPending = cloudState !== 'ready' && state.scope !== 'local';
   main.innerHTML = `
     ${all ? `<section class="hero" aria-labelledby="welcome-title">
       <div class="hero-copy">
@@ -285,19 +292,19 @@ function renderLibrary(docs) {
       <div class="category-grid">
         ${categories().map(category => `<button class="category-card" type="button" data-nav="category/${escapeHtml(category)}">
           <span class="card-top">${categoryIcon(category)}${icons.external}</span>
-          <strong>${escapeHtml(category)}</strong><small>${docs.filter(doc => doc.category === category).length} 篇文档</small>
+          <strong>${escapeHtml(category)}</strong><small>${cloudState === 'ready' ? `${docs.filter(doc => doc.category === category).length} 篇文档` : '—'}</small>
         </button>`).join('')}
       </div>
     </section>` : ''}
     <section class="document-section" aria-labelledby="documents-heading">
       <div class="section-title list-heading">
-        <div><${all ? 'h2' : 'h1'} id="documents-heading">${all ? '最近文档' : escapeHtml(activeTitle)}</${all ? 'h2' : 'h1'}><span class="document-count">${visible.length} 篇</span></div>
+        <div><${all ? 'h2' : 'h1'} id="documents-heading">${all ? '最近文档' : escapeHtml(activeTitle)}</${all ? 'h2' : 'h1'}>${countPending ? '' : `<span class="document-count">${visible.length} 篇</span>`}</div>
         <label class="sort"><select aria-label="排序"><option value="newest" ${state.order === 'newest' ? 'selected' : ''}>最新优先</option><option value="oldest" ${state.order === 'oldest' ? 'selected' : ''}>最早优先</option></select>${icons.chevron}</label>
       </div>
       ${state.tag ? `<button type="button" class="tag active-tag" data-action="clear-tag">${escapeHtml(state.tag)} ${icons.close}</button>` : ''}
       ${managing ? '<p class="management-note">在这里管理云端文档。本机旧文档可在编辑后保存到云端。</p>' : ''}
       <div class="document-list${managing ? ' management-list' : ''}">
-        ${visible.length ? visible.map(doc => documentRow(doc, managing)).join('') : `<div class="empty">${icons.inbox}<h2>${state.query ? '没有匹配的文档' : '这里还没有文档'}</h2>
+        ${visible.length ? visible.map(doc => documentRow(doc, managing)).join('') : countPending ? '' : `<div class="empty">${icons.inbox}<h2>${state.query ? '没有匹配的文档' : '这里还没有文档'}</h2>
           <p>${state.query ? '试试其他关键词。' : state.scope === 'bookmarks' ? '点击文档右侧的收藏按钮，就可以在这里找到它。' : '导入飞书文档或 Markdown，将它加入知识库。'}</p>
           ${state.query ? '<button type="button" class="button secondary" data-action="clear-search">清除搜索</button>' : state.scope === 'bookmarks' ? '<button type="button" class="button secondary" data-nav="all">浏览文档</button>' : '<button type="button" class="button primary" data-action="import">导入文档</button>'}
         </div>`}
@@ -363,7 +370,7 @@ function render() {
   if (doc) renderReader(doc);
   else if (documentId()) {
     document.querySelector('#breadcrumb-current').textContent = '文档';
-    main.innerHTML = `<div class="empty missing">${icons.inbox}<h1>找不到此文档</h1><p>本机文档只能在保存它的浏览器里打开。</p><button class="button secondary" type="button" data-nav="all">返回全部文档</button></div>`;
+    main.innerHTML = cloudState === 'ready' ? `<div class="empty missing">${icons.inbox}<h1>找不到此文档</h1><p>本机文档只能在保存它的浏览器里打开。</p><button class="button secondary" type="button" data-nav="all">返回全部文档</button></div>` : '';
   } else renderLibrary(docs);
   document.title = doc ? `${doc.title} · 知屿` : managing ? '后台管理 · 知屿' : '知屿 · 个人知识库';
 }
@@ -394,6 +401,7 @@ deleteDialog.addEventListener('close', () => {
 });
 
 const actions = {
+  'reload-cloud': reloadCloudDocuments,
   import: () => openImport(),
   'sign-out': () => location.reload(),
   share: () => {
@@ -531,18 +539,29 @@ document.addEventListener('keydown', event => {
 
 async function refreshCloudDocuments() {
   const status = document.querySelector('.cloud-status');
-  status.textContent = '正在读取云端文档…';
+  const message = status.querySelector('[role="status"]');
+  const retry = status.querySelector('button');
+  cloudState = 'loading';
+  message.textContent = '正在读取云端文档…';
+  retry.hidden = true;
   status.hidden = false;
+  render();
   try {
     cloudDocuments = await ownerSession.privateDocuments.list();
+    cloudState = 'ready';
     status.hidden = true;
   } catch (error) {
-    status.textContent = error.name === 'CloudDocumentError' ? error.message : '云端文档加载失败，请重新登录重试。';
+    cloudState = 'error';
+    message.textContent = error.name === 'CloudDocumentError' ? error.message : '云端文档加载失败，请稍后重试。';
+    retry.hidden = false;
   }
   render();
 }
 
-render();
-cloudRead = refreshCloudDocuments().finally(() => { cloudRead = undefined; });
+function reloadCloudDocuments() {
+  cloudRead ??= refreshCloudDocuments().finally(() => { cloudRead = undefined; });
+}
+
+reloadCloudDocuments();
 refreshDrafts();
 if (ownerSession.repositoryError) toast(ownerSession.repositoryError);
